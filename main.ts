@@ -1,6 +1,7 @@
 import { App, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, Notice, TFile } from 'obsidian';
 import { WorkspaceView, WORKSPACE_VIEW_TYPE } from './src/ui/WorkspaceView';
 import { GoogleFilePicker } from './src/ui/GoogleFilePicker';
+import { AIWorkspaceModal } from './src/ui/AIWorkspaceModal';
 import { OAuthManager } from './src/auth/OAuth';
 import { DocsService } from './src/services/DocsService';
 import { SheetsService } from './src/services/SheetsService';
@@ -155,6 +156,21 @@ export default class WorkspaceConnectPlugin extends Plugin {
             name: 'Sync with Google',
             callback: async () => {
                 await this.syncLinkedFiles();
+            }
+        });
+
+        this.addCommand({
+            id: 'open-ai-workspace-creator',
+            name: 'AI Workspace Creator',
+            checkCallback: (checking: boolean) => {
+                const activeFile = this.app.workspace.getActiveFile();
+                if (activeFile && activeFile.extension === 'md') {
+                    if (!checking) {
+                        new AIWorkspaceModal(this.app, this).open();
+                    }
+                    return true;
+                }
+                return false;
             }
         });
 
