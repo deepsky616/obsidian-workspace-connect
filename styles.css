@@ -835,3 +835,83 @@
     font-weight: 500;
     font-size: 1.05em;
 }
+
+.form-student-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.form-student-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--background-primary-alt);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.form-student-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.form-student-item.active {
+    border-color: var(--interactive-accent);
+    background: rgba(var(--interactive-accent-rgb), 0.06);
+}
+
+.form-student-item input[type="checkbox"] {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.form-student-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.form-student-label {
+    font-weight: 500;
+    font-size: 0.9em;
+}
+
+.form-student-sub {
+    font-size: 0.75em;
+    color: var(--text-faint);
+}
+
+.questions-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.questions-header-row h4 {
+    margin: 0;
+    font-size: 0.95em;
+    color: var(--text-muted);
+}
+
+.questions-total-points {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--interactive-accent);
+    background: rgba(var(--interactive-accent-rgb), 0.1);
+    padding: 3px 10px;
+    border-radius: 10px;
+}
+
+.question-points-badge {
+    font-size: 0.72em;
+    font-weight: 600;
+    color: var(--interactive-accent);
+    background: var(--background-modifier-border);
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    margin-left: auto;
+}

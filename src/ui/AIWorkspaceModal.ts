@@ -9,10 +9,20 @@ type SheetsMode = 'export' | 'import';
 
 interface FormSettings {
     formType: 'quiz' | 'survey';
+    collectGrade: boolean;
+    collectClass: boolean;
+    collectNumber: boolean;
+    collectName: boolean;
     collectEmail: boolean;
     shuffleQuestions: boolean;
     confirmationMessage: string;
     questions: DetectedQuestion[];
+    difficulty: 'easy' | 'medium' | 'hard';
+    questionCount: number;
+    questionTypes: string[];
+    pointsPerQuestion: number;
+    showCorrectAnswers: boolean;
+    anonymous: boolean;
 }
 
 interface DocsSettings {
@@ -59,10 +69,20 @@ export class AIWorkspaceModal extends Modal {
 
         this.formSettings = {
             formType: 'survey',
+            collectGrade: true,
+            collectClass: true,
+            collectNumber: true,
+            collectName: true,
             collectEmail: false,
             shuffleQuestions: false,
             confirmationMessage: 'Your response has been recorded.',
             questions: [],
+            difficulty: 'medium',
+            questionCount: 5,
+            questionTypes: ['multiple_choice', 'short_answer'],
+            pointsPerQuestion: 10,
+            showCorrectAnswers: true,
+            anonymous: false,
         };
         this.docsSettings = {
             title: '',
@@ -572,6 +592,18 @@ export class AIWorkspaceModal extends Modal {
     private renderFormsTab(forms: FormsAnalysis) {
         const container = this.contentArea.createEl('div', { cls: 'tab-panel' });
 
+        const modeSection = container.createEl('div', { cls: 'sheets-mode-toggle' });
+        const quizBtn = modeSection.createEl('button', {
+            text: '📝 Quiz',
+            cls: `sheets-mode-btn ${this.formSettings.formType === 'quiz' ? 'active' : ''}`,
+        });
+        const surveyBtn = modeSection.createEl('button', {
+            text: '📋 Survey',
+            cls: `sheets-mode-btn ${this.formSettings.formType === 'survey' ? 'active' : ''}`,
+        });
+        quizBtn.addEventListener('click', () => { this.formSettings.formType = 'quiz'; this.renderTabContent(); });
+        surveyBtn.addEventListener('click', () => { this.formSettings.formType = 'survey'; this.renderTabContent(); });
+
         const aiCard = container.createEl('div', { cls: 'ai-suggestion-card' });
         aiCard.createEl('div', { text: 'AI Analysis', cls: 'ai-card-label' });
         const formTypeBadge = forms.isQuizLikely ? 'Quiz detected' : forms.isSurveyLikely ? 'Survey detected' : 'General form';
@@ -581,29 +613,128 @@ export class AIWorkspaceModal extends Modal {
             cls: 'ai-card-detail',
         });
 
-        const settingsContainer = container.createEl('div', { cls: 'settings-section' });
-        settingsContainer.createEl('h4', { text: 'Form Settings' });
+        const studentSection = container.createEl('div', { cls: 'settings-section' });
+        studentSection.createEl('h4', { text: 'Respondent Info Fields' });
 
-        new Setting(settingsContainer).setName('Form Type')
-            .setDesc('Quiz includes scoring and correct answers. Survey collects responses.')
-            .addDropdown(dd => dd.addOption('quiz', 'Quiz').addOption('survey', 'Survey')
-                .setValue(this.formSettings.formType).onChange(v => { this.formSettings.formType = v as 'quiz' | 'survey'; this.renderTabContent(); }));
-        new Setting(settingsContainer).setName('Collect Email Addresses')
-            .addToggle(toggle => toggle.setValue(this.formSettings.collectEmail).onChange(v => { this.formSettings.collectEmail = v; }));
-        new Setting(settingsContainer).setName('Shuffle Question Order')
+        const studentGrid = studentSection.createEl('div', { cls: 'form-student-grid' });
+        this.renderStudentToggle(studentGrid, 'Grade', this.formSettings.collectGrade, v => { this.formSettings.collectGrade = v; });
+        this.renderStudentToggle(studentGrid, 'Class', this.formSettings.collectClass, v => { this.formSettings.collectClass = v; });
+        this.renderStudentToggle(studentGrid, 'Number', this.formSettings.collectNumber, v => { this.formSettings.collectNumber = v; });
+        this.renderStudentToggle(studentGrid, 'Name', this.formSettings.collectName, v => { this.formSettings.collectName = v; });
+
+        if (this.formSettings.formType === 'quiz') {
+            this.renderQuizSettings(container, forms);
+        } else {
+            this.renderSurveySettings(container, forms);
+        }
+
+        this.renderQuestionPreview(container, forms);
+
+        const formTypeLabel = this.formSettings.formType === 'quiz' ? 'Quiz' : 'Form';
+        this.renderStandardFooter(`Google ${formTypeLabel}`, () => this.executeFormsCreate(false), () => this.executeFormsCreate(true));
+    }
+
+    private renderStudentToggle(container: HTMLElement, label: string, value: boolean, onChange: (v: boolean) => void) {
+        const labelMap: Record<string, string> = { 'Grade': '학년', 'Class': '반', 'Number': '번호', 'Name': '이름' };
+        const item = container.createEl('div', { cls: `form-student-item ${value ? 'active' : ''}` });
+        const checkbox = item.createEl('input', { type: 'checkbox' }) as HTMLInputElement;
+        checkbox.checked = value;
+        const textWrap = item.createEl('div', { cls: 'form-student-text' });
+        textWrap.createEl('span', { text: label, cls: 'form-student-label' });
+        textWrap.createEl('span', { text: labelMap[label] || '', cls: 'form-student-sub' });
+        checkbox.addEventListener('change', () => {
+            onChange(checkbox.checked);
+            item.toggleClass('active', checkbox.checked);
+        });
+        item.addEventListener('click', (e) => {
+            if (e.target === checkbox) return;
+            checkbox.checked = !checkbox.checked;
+            onChange(checkbox.checked);
+            item.toggleClass('active', checkbox.checked);
+        });
+    }
+
+    private renderQuizSettings(container: HTMLElement, forms: FormsAnalysis) {
+        const section = container.createEl('div', { cls: 'settings-section' });
+        section.createEl('h4', { text: 'Quiz Settings' });
+
+        new Setting(section).setName('Difficulty').setDesc('Filter questions by difficulty level')
+            .addDropdown(dd => dd
+                .addOption('easy', 'Easy').addOption('medium', 'Medium').addOption('hard', 'Hard')
+                .setValue(this.formSettings.difficulty)
+                .onChange(v => { this.formSettings.difficulty = v as 'easy' | 'medium' | 'hard'; }));
+
+        new Setting(section).setName('Number of Questions').setDesc(`Max available: ${forms.questions.length}`)
+            .addSlider(slider => slider
+                .setLimits(1, Math.max(forms.questions.length, 1), 1)
+                .setValue(Math.min(this.formSettings.questionCount, forms.questions.length || 1))
+                .setDynamicTooltip()
+                .onChange(v => { this.formSettings.questionCount = v; }));
+
+        new Setting(section).setName('Question Types')
+            .addDropdown(dd => dd
+                .addOption('all', 'All Types')
+                .addOption('multiple_choice', 'Multiple Choice Only')
+                .addOption('short_answer', 'Short Answer Only')
+                .addOption('checkbox', 'Checkboxes Only')
+                .addOption('mixed', 'Mixed (MCQ + Short Answer)')
+                .setValue(this.formSettings.questionTypes.length > 1 ? 'mixed' : this.formSettings.questionTypes[0] || 'all')
+                .onChange(v => {
+                    if (v === 'all') this.formSettings.questionTypes = ['multiple_choice', 'short_answer', 'checkbox', 'paragraph', 'scale', 'dropdown'];
+                    else if (v === 'mixed') this.formSettings.questionTypes = ['multiple_choice', 'short_answer'];
+                    else this.formSettings.questionTypes = [v];
+                }));
+
+        new Setting(section).setName('Points per Question')
+            .addDropdown(dd => dd
+                .addOption('5', '5 points').addOption('10', '10 points').addOption('20', '20 points').addOption('25', '25 points')
+                .setValue(this.formSettings.pointsPerQuestion.toString())
+                .onChange(v => { this.formSettings.pointsPerQuestion = parseInt(v); }));
+
+        new Setting(section).setName('Show Correct Answers After Submit')
+            .addToggle(toggle => toggle.setValue(this.formSettings.showCorrectAnswers).onChange(v => { this.formSettings.showCorrectAnswers = v; }));
+
+        new Setting(section).setName('Shuffle Question Order')
             .addToggle(toggle => toggle.setValue(this.formSettings.shuffleQuestions).onChange(v => { this.formSettings.shuffleQuestions = v; }));
-        new Setting(settingsContainer).setName('Confirmation Message')
+    }
+
+    private renderSurveySettings(container: HTMLElement, _forms: FormsAnalysis) {
+        const section = container.createEl('div', { cls: 'settings-section' });
+        section.createEl('h4', { text: 'Survey Settings' });
+
+        new Setting(section).setName('Anonymous Responses').setDesc('Do not collect respondent identity (overrides info fields above)')
+            .addToggle(toggle => toggle.setValue(this.formSettings.anonymous).onChange(v => { this.formSettings.anonymous = v; }));
+
+        new Setting(section).setName('Collect Email Addresses')
+            .addToggle(toggle => toggle.setValue(this.formSettings.collectEmail).onChange(v => { this.formSettings.collectEmail = v; }));
+
+        new Setting(section).setName('Shuffle Question Order')
+            .addToggle(toggle => toggle.setValue(this.formSettings.shuffleQuestions).onChange(v => { this.formSettings.shuffleQuestions = v; }));
+
+        new Setting(section).setName('Confirmation Message')
             .addText(text => text.setValue(this.formSettings.confirmationMessage).onChange(v => { this.formSettings.confirmationMessage = v; }));
+    }
 
-        if (forms.questions.length > 0) {
+    private renderQuestionPreview(container: HTMLElement, forms: FormsAnalysis) {
+        const filteredQuestions = this.getFilteredQuestions(forms);
+
+        if (filteredQuestions.length > 0) {
             const questionsSection = container.createEl('div', { cls: 'questions-section' });
-            questionsSection.createEl('h4', { text: 'Detected Questions' });
+            const headerRow = questionsSection.createEl('div', { cls: 'questions-header-row' });
+            headerRow.createEl('h4', { text: `Questions (${filteredQuestions.length})` });
+            if (this.formSettings.formType === 'quiz') {
+                const totalPoints = filteredQuestions.length * this.formSettings.pointsPerQuestion;
+                headerRow.createEl('span', { text: `Total: ${totalPoints} pts`, cls: 'questions-total-points' });
+            }
 
-            forms.questions.forEach((question, index) => {
+            filteredQuestions.forEach((question, index) => {
                 const questionCard = questionsSection.createEl('div', { cls: 'question-card' });
                 const questionHeader = questionCard.createEl('div', { cls: 'question-header' });
                 questionHeader.createEl('span', { text: `Q${index + 1}`, cls: 'question-number' });
                 questionHeader.createEl('span', { text: question.text, cls: 'question-text' });
+                if (this.formSettings.formType === 'quiz') {
+                    questionHeader.createEl('span', { text: `${this.formSettings.pointsPerQuestion}pts`, cls: 'question-points-badge' });
+                }
 
                 const questionMeta = questionCard.createEl('div', { cls: 'question-meta' });
                 const typeMap: Record<string, string> = {
@@ -635,23 +766,67 @@ export class AIWorkspaceModal extends Modal {
                 cls: 'ai-card-value',
             });
         }
+    }
 
-        const formTypeLabel = this.formSettings.formType === 'quiz' ? 'Quiz' : 'Form';
-        this.renderStandardFooter(`Google ${formTypeLabel}`, () => this.executeFormsCreate(false), () => this.executeFormsCreate(true));
+    private getFilteredQuestions(forms: FormsAnalysis): DetectedQuestion[] {
+        let questions = [...forms.questions];
+
+        if (this.formSettings.formType === 'quiz') {
+            if (!this.formSettings.questionTypes.includes('all')) {
+                const allowedTypes = new Set(this.formSettings.questionTypes);
+                if (allowedTypes.size > 0) {
+                    const typeFiltered = questions.filter(q => allowedTypes.has(q.type));
+                    if (typeFiltered.length > 0) questions = typeFiltered;
+                }
+            }
+            questions = questions.slice(0, this.formSettings.questionCount);
+        }
+
+        return questions;
     }
 
     private async executeFormsCreate(embedAtCursor: boolean) {
         if (!this.plugin.isAuthenticated()) { new Notice('Please connect to Google first in settings'); return; }
         if (!this.analysis) return;
         try {
-            const formTypeLabel = this.formSettings.formType === 'quiz' ? 'Quiz' : 'Form';
+            const isQuiz = this.formSettings.formType === 'quiz';
+            const formTypeLabel = isQuiz ? 'Quiz' : 'Survey';
             new Notice(`Creating Google ${formTypeLabel}...`);
 
-            const formId = await this.plugin.formsService.createForm(
-                this.analysis.forms.suggestedTitle, this.analysis.forms.description
-            );
+            const formTitle = this.analysis.forms.suggestedTitle;
+            const formId = await this.plugin.formsService.createForm(formTitle, this.analysis.forms.description);
 
-            for (const question of this.formSettings.questions) {
+            if (isQuiz) {
+                await this.plugin.formsService.updateFormSettings(formId, { isQuiz: true });
+            }
+
+            const batchQuestions: {
+                title: string;
+                questionType: 'SHORT_ANSWER' | 'PARAGRAPH' | 'MULTIPLE_CHOICE' | 'CHECKBOXES' | 'DROPDOWN' | 'SCALE';
+                options?: { choices?: string[]; required?: boolean };
+                correctAnswer?: string;
+                points?: number;
+            }[] = [];
+
+            const shouldCollectInfo = isQuiz || !this.formSettings.anonymous;
+            if (shouldCollectInfo) {
+                if (this.formSettings.collectGrade) {
+                    batchQuestions.push({ title: 'Grade (학년)', questionType: 'SHORT_ANSWER', options: { required: true } });
+                }
+                if (this.formSettings.collectClass) {
+                    batchQuestions.push({ title: 'Class (반)', questionType: 'SHORT_ANSWER', options: { required: true } });
+                }
+                if (this.formSettings.collectNumber) {
+                    batchQuestions.push({ title: 'Number (번호)', questionType: 'SHORT_ANSWER', options: { required: true } });
+                }
+                if (this.formSettings.collectName) {
+                    batchQuestions.push({ title: 'Name (이름)', questionType: 'SHORT_ANSWER', options: { required: true } });
+                }
+            }
+
+            const filteredQuestions = this.getFilteredQuestions(this.analysis.forms);
+
+            for (const question of filteredQuestions) {
                 let qType: 'SHORT_ANSWER' | 'PARAGRAPH' | 'MULTIPLE_CHOICE' | 'CHECKBOXES' | 'DROPDOWN' | 'SCALE';
                 switch (question.type) {
                     case 'multiple_choice': qType = 'MULTIPLE_CHOICE'; break;
@@ -662,29 +837,39 @@ export class AIWorkspaceModal extends Modal {
                     case 'dropdown': qType = 'DROPDOWN'; break;
                     default: qType = 'SHORT_ANSWER';
                 }
-                await this.plugin.formsService.addQuestion(formId, question.text, qType, {
-                    choices: question.options.length > 0 ? question.options : undefined,
-                    required: question.required,
+                batchQuestions.push({
+                    title: question.text,
+                    questionType: qType,
+                    options: {
+                        choices: question.options.length > 0 ? question.options : undefined,
+                        required: question.required,
+                    },
+                    correctAnswer: isQuiz ? question.correctAnswer : undefined,
+                    points: isQuiz ? this.formSettings.pointsPerQuestion : undefined,
                 });
             }
 
-            this.linkFile(formId, 'forms', this.analysis.forms.suggestedTitle);
+            await this.plugin.formsService.addQuestionBatch(formId, batchQuestions);
+            this.linkFile(formId, 'forms', formTitle);
+
+            const infoCount = batchQuestions.length - filteredQuestions.length;
+            const totalPoints = isQuiz ? filteredQuestions.length * this.formSettings.pointsPerQuestion : 0;
 
             if (embedAtCursor) {
-                const embed = [
+                const embedLines = [
                     '',
-                    `> [!info] 📝 ${formTypeLabel}: ${this.analysis.forms.suggestedTitle}`,
-                    `> ${this.formSettings.questions.length} questions | ${formTypeLabel}`,
+                    `> [!info] 📝 ${formTypeLabel}: ${formTitle}`,
+                    `> ${filteredQuestions.length} questions${infoCount > 0 ? ` + ${infoCount} info fields` : ''}${isQuiz ? ` | ${totalPoints} points` : ''}`,
                     `> [Open ${formTypeLabel}](https://docs.google.com/forms/d/${formId}/viewform)`,
                     `> [Edit ${formTypeLabel}](https://docs.google.com/forms/d/${formId}/edit)`,
                     `> [View Responses](https://docs.google.com/forms/d/${formId}/edit#responses)`,
                     '',
-                ].join('\n');
-                this.insertAtCursor(embed);
+                ];
+                this.insertAtCursor(embedLines.join('\n'));
                 new Notice(`Google ${formTypeLabel} created and embedded!`);
             } else {
                 window.open(`https://docs.google.com/forms/d/${formId}/edit`);
-                new Notice(`Created and opened: ${this.analysis.forms.suggestedTitle}`);
+                new Notice(`Created and opened: ${formTitle}`);
             }
             this.close();
         } catch (e: any) { new Notice(`Failed: ${e.message}`); }

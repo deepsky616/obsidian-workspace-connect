@@ -229,6 +229,90 @@ export class FormsService extends GoogleApiService {
         return response.replies?.[0]?.createItem?.itemId || '';
     }
 
+    async updateFormSettings(formId: string, settings: {
+        isQuiz?: boolean;
+        collectEmail?: boolean;
+        shuffleQuestions?: boolean;
+        confirmationMessage?: string;
+    }): Promise<void> {
+        const requests: any[] = [];
+
+        if (settings.isQuiz !== undefined) {
+            requests.push({
+                updateSettings: {
+                    settings: { quizSettings: { isQuiz: settings.isQuiz } },
+                    updateMask: 'quizSettings.isQuiz',
+                },
+            });
+        }
+
+        if (requests.length > 0) {
+            await this.post(`https://forms.googleapis.com/v1/forms/${formId}:batchUpdate`, { requests });
+        }
+    }
+
+    async addQuestionBatch(
+        formId: string,
+        questions: {
+            title: string;
+            questionType: 'SHORT_ANSWER' | 'PARAGRAPH' | 'MULTIPLE_CHOICE' | 'CHECKBOXES' | 'DROPDOWN' | 'SCALE';
+            options?: { choices?: string[]; required?: boolean; low?: number; high?: number };
+            correctAnswer?: string;
+            points?: number;
+        }[],
+    ): Promise<void> {
+        const requests: any[] = [];
+
+        for (let i = 0; i < questions.length; i++) {
+            const q = questions[i];
+            let question: any = {};
+
+            switch (q.questionType) {
+                case 'SHORT_ANSWER':
+                    question = { textQuestion: { paragraph: false } };
+                    break;
+                case 'PARAGRAPH':
+                    question = { textQuestion: { paragraph: true } };
+                    break;
+                case 'MULTIPLE_CHOICE':
+                    question = { choiceQuestion: { type: 'RADIO', options: q.options?.choices?.map(c => ({ value: c })) || [] } };
+                    break;
+                case 'CHECKBOXES':
+                    question = { choiceQuestion: { type: 'CHECKBOX', options: q.options?.choices?.map(c => ({ value: c })) || [] } };
+                    break;
+                case 'DROPDOWN':
+                    question = { choiceQuestion: { type: 'DROP_DOWN', options: q.options?.choices?.map(c => ({ value: c })) || [] } };
+                    break;
+                case 'SCALE':
+                    question = { scaleQuestion: { low: q.options?.low || 1, high: q.options?.high || 5 } };
+                    break;
+            }
+
+            question.required = q.options?.required || false;
+
+            // Add grading for quiz questions
+            if (q.correctAnswer && q.points !== undefined) {
+                question.grading = {
+                    pointValue: q.points,
+                    correctAnswers: {
+                        answers: [{ value: q.correctAnswer }],
+                    },
+                };
+            }
+
+            requests.push({
+                createItem: {
+                    item: { title: q.title, questionItem: { question } },
+                    location: { index: i },
+                },
+            });
+        }
+
+        if (requests.length > 0) {
+            await this.post(`https://forms.googleapis.com/v1/forms/${formId}:batchUpdate`, { requests });
+        }
+    }
+
     getQuestionTypeLabel(question: Question): string {
         if (question.textQuestion) {
             return question.textQuestion.paragraph ? 'Long Answer' : 'Short Answer';
