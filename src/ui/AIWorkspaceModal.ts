@@ -162,6 +162,13 @@ export class AIWorkspaceModal extends Modal {
         this.editorRef.replaceRange(insertText, { line: this.cursorLine, ch: this.cursorCh });
     }
 
+    private async moveToConfiguredFolder(fileId: string): Promise<void> {
+        const folderId = this.plugin.settings.googleDriveFolderId;
+        if (folderId) {
+            await this.plugin.driveService.moveToFolder(fileId, folderId);
+        }
+    }
+
     private linkFile(googleFileId: string, googleFileType: 'docs' | 'sheets' | 'slides' | 'forms', googleFileName: string) {
         if (!this.noteFile) return;
         this.plugin.settings.linkedFiles.push({
@@ -271,13 +278,16 @@ export class AIWorkspaceModal extends Modal {
         try {
             new Notice('Creating Google Doc...');
             const docId = await this.plugin.docsService.createDocument(this.docsSettings.title, this.noteContent);
+            await this.moveToConfiguredFolder(docId);
             this.linkFile(docId, 'docs', this.docsSettings.title);
 
             if (embedAtCursor) {
                 const embed = [
                     '',
-                    `> [!note] 📄 Google Doc: ${this.docsSettings.title}`,
-                    `> [Open Document](https://docs.google.com/document/d/${docId}/edit)`,
+                    `#### 📄 ${this.docsSettings.title}`,
+                    `<iframe src="https://docs.google.com/document/d/${docId}/edit?embedded=true" width="100%" height="600" frameborder="0" allowfullscreen></iframe>`,
+                    '',
+                    `> [Open in Browser](https://docs.google.com/document/d/${docId}/edit)`,
                     '',
                 ].join('\n');
                 this.insertAtCursor(embed);
@@ -440,13 +450,16 @@ export class AIWorkspaceModal extends Modal {
                 }
             }
             const sheetId = await this.plugin.sheetsService.createSpreadsheet(this.sheetsSettings.title, data);
+            await this.moveToConfiguredFolder(sheetId);
             this.linkFile(sheetId, 'sheets', this.sheetsSettings.title);
 
             if (embedAtCursor) {
                 const embed = [
                     '',
-                    `> [!note] 📊 Google Sheet: ${this.sheetsSettings.title}`,
-                    `> [Open Spreadsheet](https://docs.google.com/spreadsheets/d/${sheetId}/edit)`,
+                    `#### 📊 ${this.sheetsSettings.title}`,
+                    `<iframe src="https://docs.google.com/spreadsheets/d/${sheetId}/edit?embedded=true" width="100%" height="450" frameborder="0" allowfullscreen></iframe>`,
+                    '',
+                    `> [Open in Browser](https://docs.google.com/spreadsheets/d/${sheetId}/edit)`,
                     '',
                 ].join('\n');
                 this.insertAtCursor(embed);
@@ -563,15 +576,16 @@ export class AIWorkspaceModal extends Modal {
                     body: slide.bulletPoints.join('\n'),
                 });
             }
+            await this.moveToConfiguredFolder(presentationId);
             this.linkFile(presentationId, 'slides', this.slidesSettings.title);
 
             if (embedAtCursor) {
                 const embed = [
                     '',
-                    `> [!note] 📽️ Google Slides: ${this.slidesSettings.title}`,
-                    `> ${selectedSlides.length} slides | ${this.analysis.slides.estimatedDuration}`,
-                    `> [Open Presentation](https://docs.google.com/presentation/d/${presentationId}/edit)`,
-                    `> [Start Slideshow](https://docs.google.com/presentation/d/${presentationId}/present)`,
+                    `#### 📽️ ${this.slidesSettings.title}`,
+                    `<iframe src="https://docs.google.com/presentation/d/${presentationId}/embed?start=false&loop=false" width="100%" height="470" frameborder="0" allowfullscreen></iframe>`,
+                    '',
+                    `> [Edit Presentation](https://docs.google.com/presentation/d/${presentationId}/edit) | [Start Slideshow](https://docs.google.com/presentation/d/${presentationId}/present)`,
                     '',
                 ].join('\n');
                 this.insertAtCursor(embed);
@@ -849,6 +863,7 @@ export class AIWorkspaceModal extends Modal {
             }
 
             await this.plugin.formsService.addQuestionBatch(formId, batchQuestions);
+            await this.moveToConfiguredFolder(formId);
             this.linkFile(formId, 'forms', formTitle);
 
             const infoCount = batchQuestions.length - filteredQuestions.length;
@@ -857,11 +872,10 @@ export class AIWorkspaceModal extends Modal {
             if (embedAtCursor) {
                 const embedLines = [
                     '',
-                    `> [!info] 📝 ${formTypeLabel}: ${formTitle}`,
-                    `> ${filteredQuestions.length} questions${infoCount > 0 ? ` + ${infoCount} info fields` : ''}${isQuiz ? ` | ${totalPoints} points` : ''}`,
-                    `> [Open ${formTypeLabel}](https://docs.google.com/forms/d/${formId}/viewform)`,
-                    `> [Edit ${formTypeLabel}](https://docs.google.com/forms/d/${formId}/edit)`,
-                    `> [View Responses](https://docs.google.com/forms/d/${formId}/edit#responses)`,
+                    `#### 📝 ${formTypeLabel}: ${formTitle}`,
+                    `<iframe src="https://docs.google.com/forms/d/${formId}/viewform?embedded=true" width="100%" height="600" frameborder="0" allowfullscreen></iframe>`,
+                    '',
+                    `> [Edit ${formTypeLabel}](https://docs.google.com/forms/d/${formId}/edit) | [View Responses](https://docs.google.com/forms/d/${formId}/edit#responses)`,
                     '',
                 ];
                 this.insertAtCursor(embedLines.join('\n'));

@@ -28,6 +28,7 @@ export interface WorkspaceConnectSettings {
     refreshToken: string;
     tokenExpiry: string;
     defaultImportFolder: string;
+    googleDriveFolderId: string;
     linkedFiles: LinkedFile[];
 }
 
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS: WorkspaceConnectSettings = {
     refreshToken: '',
     tokenExpiry: '',
     defaultImportFolder: '',
+    googleDriveFolderId: '',
     linkedFiles: []
 }
 
@@ -300,8 +302,10 @@ export default class WorkspaceConnectPlugin extends Plugin {
                 await this.saveSettings();
                 new Notice(`Updated Google Doc: ${linked.googleFileName}`);
             } else {
-                // Create new document
                 const docId = await this.docsService.createDocument(file.basename, content);
+                if (this.settings.googleDriveFolderId) {
+                    await this.driveService.moveToFolder(docId, this.settings.googleDriveFolderId);
+                }
 
                 this.settings.linkedFiles.push({
                     localPath: file.path,
@@ -344,8 +348,10 @@ export default class WorkspaceConnectPlugin extends Plugin {
                 await this.saveSettings();
                 new Notice(`Updated Google Sheet: ${linked.googleFileName}`);
             } else {
-                // Create new spreadsheet
                 const sheetId = await this.sheetsService.createSpreadsheet(file.basename, tables[0]);
+                if (this.settings.googleDriveFolderId) {
+                    await this.driveService.moveToFolder(sheetId, this.settings.googleDriveFolderId);
+                }
 
                 this.settings.linkedFiles.push({
                     localPath: file.path,
@@ -380,6 +386,9 @@ export default class WorkspaceConnectPlugin extends Plugin {
             }
 
             const docId = await this.docsService.createDocument(title, content);
+            if (this.settings.googleDriveFolderId) {
+                await this.driveService.moveToFolder(docId, this.settings.googleDriveFolderId);
+            }
 
             if (activeFile) {
                 this.settings.linkedFiles.push({
@@ -576,12 +585,24 @@ class WorkspaceConnectSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Default Import Folder')
-            .setDesc('Folder where imported files will be saved (leave empty for vault root)')
+            .setDesc('Local Obsidian folder where imported files will be saved (leave empty for vault root)')
             .addText(text => text
                 .setPlaceholder('Google Imports')
                 .setValue(this.plugin.settings.defaultImportFolder)
                 .onChange(async (value) => {
                     this.plugin.settings.defaultImportFolder = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Google Drive Folder')
+            .setDesc('Google Drive folder where created files will be saved. Paste folder URL or ID.')
+            .addText(text => text
+                .setPlaceholder('https://drive.google.com/drive/folders/... or folder ID')
+                .setValue(this.plugin.settings.googleDriveFolderId)
+                .onChange(async (value) => {
+                    const folderIdMatch = value.match(/folders\/([a-zA-Z0-9_-]+)/);
+                    this.plugin.settings.googleDriveFolderId = folderIdMatch ? folderIdMatch[1] : value.trim();
                     await this.plugin.saveSettings();
                 }));
 

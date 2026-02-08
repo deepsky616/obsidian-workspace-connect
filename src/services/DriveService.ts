@@ -73,6 +73,27 @@ export class DriveService extends GoogleApiService {
         return await this.get(`https://www.googleapis.com/drive/v3/files/${fileId}?${params.toString()}`);
     }
 
+    async moveToFolder(fileId: string, folderId: string): Promise<void> {
+        const params = new URLSearchParams({
+            addParents: folderId,
+            fields: 'id,parents',
+        });
+
+        const currentMeta = await this.get(
+            `https://www.googleapis.com/drive/v3/files/${fileId}?fields=parents`
+        );
+
+        const removeParents = currentMeta.parents ? currentMeta.parents.join(',') : '';
+        if (removeParents) {
+            params.set('removeParents', removeParents);
+        }
+
+        await this.patch(
+            `https://www.googleapis.com/drive/v3/files/${fileId}?${params.toString()}`,
+            {}
+        );
+    }
+
     getFileType(mimeType: string): 'docs' | 'sheets' | 'slides' | 'forms' | null {
         const entries = Object.entries(MIME_TYPES);
         for (const [type, mime] of entries) {
