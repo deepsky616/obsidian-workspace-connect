@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, Notice, Menu } from 'obsidian';
 import WorkspaceConnectPlugin, { LinkedFile } from '../../main';
 import { GoogleFile } from '../services/DriveService';
 import { GoogleFilePicker } from './GoogleFilePicker';
+import { AIWorkspaceModal } from './AIWorkspaceModal';
 import { DocsConverter } from '../converters/DocsConverter';
 import { SheetsConverter } from '../converters/SheetsConverter';
 import { SlidesConverter } from '../converters/SlidesConverter';
@@ -48,7 +49,19 @@ export class WorkspaceView extends ItemView {
         // Main content
         this.contentContainer = container.createDiv({ cls: 'workspace-content' });
 
-        // Actions section
+        const aiBtn = this.contentContainer.createEl('button', {
+            text: '✨ AI Workspace Creator',
+            cls: 'ai-workspace-creator-btn',
+        });
+        aiBtn.addEventListener('click', () => {
+            const activeFile = this.app.workspace.getActiveFile();
+            if (activeFile && activeFile.extension === 'md') {
+                new AIWorkspaceModal(this.app, this.plugin).open();
+            } else {
+                new Notice('Please open a Markdown note first');
+            }
+        });
+
         const actionsSection = this.contentContainer.createDiv({ cls: 'workspace-actions' });
         actionsSection.createEl('h4', { text: 'Quick Actions' });
 

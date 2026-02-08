@@ -67,9 +67,14 @@ export default class WorkspaceConnectPlugin extends Plugin {
             (leaf) => new WorkspaceView(leaf, this)
         );
 
-        // Ribbon Icon
-        this.addRibbonIcon('cloud', 'Open Workspace Connect', () => {
-            this.activateView();
+        // Ribbon Icon — opens AI Workspace Creator if .md file is active, otherwise sidebar
+        this.addRibbonIcon('cloud', 'Workspace Connect', () => {
+            const activeFile = this.app.workspace.getActiveFile();
+            if (activeFile && activeFile.extension === 'md') {
+                new AIWorkspaceModal(this.app, this).open();
+            } else {
+                this.activateView();
+            }
         });
 
         // Commands

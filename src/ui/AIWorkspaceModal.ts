@@ -53,6 +53,7 @@ export class AIWorkspaceModal extends Modal {
     private noteFile: TFile | null = null;
     private cursorLine: number = 0;
     private cursorCh: number = 0;
+    private editorRef: MarkdownView['editor'] | null = null;
 
     private tabContainer: HTMLElement;
     private contentArea: HTMLElement;
@@ -121,8 +122,8 @@ export class AIWorkspaceModal extends Modal {
         this.noteFile = markdownView.file;
         this.noteContent = await this.app.vault.read(this.noteFile);
 
-        const editor = markdownView.editor;
-        const cursor = editor.getCursor();
+        this.editorRef = markdownView.editor;
+        const cursor = this.editorRef.getCursor();
         this.cursorLine = cursor.line;
         this.cursorCh = cursor.ch;
 
@@ -151,16 +152,14 @@ export class AIWorkspaceModal extends Modal {
     }
 
     private insertAtCursor(text: string) {
-        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (!markdownView) return;
-        const editor = markdownView.editor;
+        if (!this.editorRef) return;
 
-        const lineContent = editor.getLine(this.cursorLine);
+        const lineContent = this.editorRef.getLine(this.cursorLine);
         let insertText = text;
         if (lineContent.trim().length > 0) {
             insertText = '\n' + text;
         }
-        editor.replaceRange(insertText, { line: this.cursorLine, ch: this.cursorCh });
+        this.editorRef.replaceRange(insertText, { line: this.cursorLine, ch: this.cursorCh });
     }
 
     private linkFile(googleFileId: string, googleFileType: 'docs' | 'sheets' | 'slides' | 'forms', googleFileName: string) {
@@ -479,6 +478,7 @@ export class AIWorkspaceModal extends Modal {
             const files = await this.plugin.driveService.listFiles('sheets');
             const savedCursorLine = this.cursorLine;
             const savedCursorCh = this.cursorCh;
+            const savedEditor = this.editorRef;
             this.close();
 
             new GoogleFilePicker(this.app, files, async (selectedFile) => {
@@ -488,9 +488,8 @@ export class AIWorkspaceModal extends Modal {
                     if (values.length === 0) { new Notice('Sheet is empty'); return; }
                     const markdownTable = SheetsConverter.arrayToMarkdownTable(values);
 
-                    const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
-                    if (mdView) {
-                        mdView.editor.replaceRange('\n' + markdownTable + '\n', { line: savedCursorLine, ch: savedCursorCh });
+                    if (savedEditor) {
+                        savedEditor.replaceRange('\n' + markdownTable + '\n', { line: savedCursorLine, ch: savedCursorCh });
                     }
 
                     this.linkFile(selectedFile.id, 'sheets', selectedFile.name);
